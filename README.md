@@ -24,7 +24,7 @@ SCHEDULER_WEB_DIR=../docling-ui/dist \
 # open the printed URL: http://localhost:8765/#token=...
 ```
 
-Without `SCHEDULER_WEB_DIR`, only the API is served. The API binds to loopback only: it can start containers.
+Without `SCHEDULER_WEB_DIR`, only the API is served. The API binds to loopback by default, because it can start containers. `--host 0.0.0.0` (or any other address) listens more widely; then the bearer token and the `SCHEDULER_ALLOWED_HOSTS` / `SCHEDULER_ALLOWED_ORIGINS` checks are its only guard.
 
 Every `/api` call needs `Authorization: Bearer <token>`:
 
@@ -99,6 +99,30 @@ How runs behave on a cluster:
 - **Cancel** suspends the Jobs. Pods get SIGTERM and are removed, so their logs go away unless the cluster ships logs elsewhere. Logs of finished pods remain available until the run is deleted.
 - **Telemetry** needs metrics-server, and is empty without it. Events are read from the namespace, so use a namespace dedicated to these runs.
 
+### Running the scheduler in the cluster
+
+The `Containerfile` builds an image with the scheduler and a built docling-ui (cloned from `UI_REPO` at `UI_REF`, `main` by default). It runs as an arbitrary non-root UID, so it fits OpenShift `restricted-v2` and the restricted Pod Security Standard:
+
+```bash
+podman build -t quay.io/you/docling-scheduler:latest -f Containerfile .
+podman push quay.io/you/docling-scheduler:latest
+```
+
+`entrypoint.sh` reads every `SCHEDULER_*` variable and applies container defaults: inside a pod, the executor is `kubernetes` and the namespace is the pod's own (in-cluster config, `docling-scheduler` service account). The UI is served from `/opt/app-root/ui`, the registry is kept at `/data/scheduler.db`, and an agent `.env` mounted at `/etc/docling-scheduler/agent.env` is picked up as `SCHEDULER_ENVFILE`.
+
+The image listens on `0.0.0.0:8765` (`SCHEDULER_HOST` / `SCHEDULER_PORT`). To deploy it, uncomment `components/scheduler` in your overlay, plus `components/scheduler-route` on OpenShift, or `components/scheduler-fsgroup` and `components/scheduler-ingress` on vanilla Kubernetes. Then set the hostname in the Route or Ingress, and set the same hostname in `SCHEDULER_ALLOWED_HOSTS` and `SCHEDULER_ALLOWED_ORIGINS` (`https://<hostname>`) in `deploy/components/scheduler/scheduler.env`. Finally, set the image:
+
+```bash
+cd deploy/overlays/openshift
+kustomize edit set image docling-scheduler=quay.io/you/docling-scheduler:latest
+oc create secret generic docling-scheduler-auth -n docling --from-literal=SCHEDULER_TOKEN=$(openssl rand -base64 32)  # optional: stable token
+oc create secret generic docling-scheduler-agent -n docling --from-file=agent.env=.env                                # optional
+oc apply -k .
+# open https://<hostname>/#token=<SCHEDULER_TOKEN>  (without a stable token: oc -n docling logs deploy/docling-scheduler)
+```
+
+The scheduler sits behind a ClusterIP Service (`docling-scheduler:8765`). The Route terminates TLS at the router. The Ingress expects a `docling-scheduler-tls` certificate Secret, since the bearer token must not travel in clear text. Without either, `oc -n docling port-forward svc/docling-scheduler 8765` still works, on local port 8765 (the Origin check expects it).
+
 ## Configuration
 
 Form defaults and secrets come from `.env` (or `SCHEDULER_ENVFILE`), using the agent's variable names. Secrets are passed to containers as Podman secrets or Kubernetes Secrets, and are never returned by the API.
@@ -120,7 +144,7 @@ Form defaults and secrets come from `.env` (or `SCHEDULER_ENVFILE`), using the a
 | `SCHEDULER_MAX_SHARDS` / `SCHEDULER_CONCURRENCY_WARNING` | `32` / `32` |
 | `SCHEDULER_DB_PATH` | `$XDG_DATA_HOME/docling-agent/scheduler.db` |
 | `SCHEDULER_TOKEN` | random per start |
-| `SCHEDULER_ALLOWED_HOSTS` / `SCHEDULER_ALLOWED_ORIGINS` | `127.0.0.1,localhost` / none (add `http://localhost:5173` for the UI dev server) |
+| `SCHEDULER_ALLOWED_HOSTS` / `SCHEDULER_ALLOWED_ORIGINS` | `127.0.0.1,localhost` / none (add `http://localhost:5173` for the UI dev server, `https://<hostname>` behind a Route or Ingress) |
 | `SCHEDULER_RECONCILE_INTERVAL` | `10` seconds |
 | `SCHEDULER_WEB_DIR` | unset (API only) |
 

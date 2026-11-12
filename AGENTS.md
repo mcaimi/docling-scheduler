@@ -1,6 +1,6 @@
 # docling-scheduler — Agent Guide
 
-`python -m docling_scheduler [--port 8765]` runs a FastAPI app on loopback only. It launches [docling-agent](https://github.com/mcaimi/docling-agent) runs as containers (one per shard), either under local Podman or as Jobs on a remote Kubernetes/OpenShift cluster (`SCHEDULER_EXECUTOR`), and monitors them through MLflow and the runtime. It also serves a built [docling-ui](https://github.com/mcaimi/docling-ui) from `SCHEDULER_WEB_DIR` and prints a `/#token=…` URL.
+`python -m docling_scheduler [--host 127.0.0.1] [--port 8765]` runs a FastAPI app, on loopback by default (the container image binds `0.0.0.0`, behind a Service). It launches [docling-agent](https://github.com/mcaimi/docling-agent) runs as containers (one per shard), either under local Podman or as Jobs on a remote Kubernetes/OpenShift cluster (`SCHEDULER_EXECUTOR`), and monitors them through MLflow and the runtime. It also serves a built [docling-ui](https://github.com/mcaimi/docling-ui) from `SCHEDULER_WEB_DIR` and prints a `/#token=…` URL.
 
 ## Boundary with the agent
 
@@ -26,7 +26,9 @@
 | `service.py` / `api.py` | Launch, refresh/reconcile, cancel, retry failed shards, delete; REST + SSE logs, bearer token, Host/Origin checks, static UI |
 | `registry.py` | SQLite metadata only (never secrets) |
 
-`deploy/` holds the cluster-side install for the Kubernetes executor, as Kustomize: a base (ServiceAccount, least-privilege Role/RoleBinding, LimitRange), optional components (quota, ingress-deny NetworkPolicy, long-lived SA token) and `openshift` / `kubernetes` overlays. The operator applies it; the scheduler never does. Keep the Role in sync with `_REQUIRED_ACCESS` and the calls in `executors/kubernetes.py`.
+`deploy/` holds the cluster-side install for the Kubernetes executor, as Kustomize: a base (ServiceAccount, least-privilege Role/RoleBinding, LimitRange), optional components (quota, ingress-deny NetworkPolicy, long-lived SA token, and `scheduler` (Deployment + Service) / `scheduler-fsgroup` / `scheduler-route` / `scheduler-ingress` to run and expose the scheduler itself in the namespace) and `openshift` / `kubernetes` overlays. The operator applies it; the scheduler never does. Keep the Role in sync with `_REQUIRED_ACCESS` and the calls in `executors/kubernetes.py`.
+
+`Containerfile` builds the scheduler image in stages: docling-ui (`npm run build`), the scheduler venv (`uv sync --extra k8s`), then a UBI minimal runtime running as an arbitrary UID in group 0. `entrypoint.sh` gives every `SCHEDULER_*` variable a container default (in a pod: `kubernetes` executor, the pod's namespace). Keep it in sync with `config.py`. Off loopback, the token and the Host/Origin checks are the only guard: an exposed hostname must be in `SCHEDULER_ALLOWED_HOSTS` and `SCHEDULER_ALLOWED_ORIGINS`, and probes send `Host: localhost`.
 
 ## Commands
 
