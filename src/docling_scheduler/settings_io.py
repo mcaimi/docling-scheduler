@@ -128,23 +128,27 @@ def merge_settings(
     return settings, errors, explicit
 
 
-def _rewrite_host(host: str | None) -> str | None:
-    if host and host.lower().strip("[]") in _LOOPBACK_HOSTS:
-        return CONTAINER_HOST_GATEWAY
-    return None
+def is_loopback_host(host: str | None) -> bool:
+    return bool(host) and host.lower().strip("[]") in _LOOPBACK_HOSTS
 
 
-def rewrite_loopback_url(url: str) -> str | None:
-    """Return ``url`` with a loopback host replaced by the container host
-    gateway, or ``None`` if it doesn't point at loopback."""
+def is_loopback_url(url: str) -> bool:
+    try:
+        return is_loopback_host(urlsplit(url).hostname)
+    except ValueError:
+        return False
+
+
+def rewrite_loopback_url(url: str, gateway: str = CONTAINER_HOST_GATEWAY) -> str | None:
+    """Return ``url`` with a loopback host replaced by ``gateway``, or
+    ``None`` if it doesn't point at loopback."""
     try:
         parts = urlsplit(url)
     except ValueError:
         return None
-    replacement = _rewrite_host(parts.hostname)
-    if replacement is None:
+    if not is_loopback_host(parts.hostname):
         return None
-    netloc = replacement
+    netloc = gateway
     if parts.port:
         netloc = f"{netloc}:{parts.port}"
     if parts.username:
@@ -153,25 +157,43 @@ def rewrite_loopback_url(url: str) -> str | None:
     return urlunsplit(parts._replace(netloc=netloc))
 
 
-def rewrite_loopback(settings: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+def setting_in_use(key: str, settings: Mapping[str, Any]) -> bool:
+    """Whether the contract's ``depends_on`` conditions hold (``milvus_uri``
+    only matters with ``vector_store_backend=milvus``)."""
+    return all(
+        settings.get(other) in values
+        for other, values in SETTINGS_BY_KEY[key].depends_on.items()
+    )
+
+
+def loopback_keys(settings: Mapping[str, Any], in_use_only: bool = False) -> list[str]:
+    """Endpoint settings (URLs and bare hosts) that point at loopback; with
+    ``in_use_only``, only those the agent will use."""
+    keys = [
+        key for key in URL_KEYS
+        if isinstance(settings.get(key), str) and is_loopback_url(settings[key])
+    ]
+    keys += [
+        key for key in HOST_KEYS
+        if isinstance(settings.get(key), str) and is_loopback_host(settings[key])
+    ]
+    return [key for key in keys if not in_use_only or setting_in_use(key, settings)]
+
+
+def rewrite_loopback(
+    settings: dict[str, Any], gateway: str = CONTAINER_HOST_GATEWAY
+) -> tuple[dict[str, Any], list[str]]:
     """Point loopback endpoints at the container host gateway.
 
     Inside a container ``localhost`` is the container itself, so services the
-    operator runs on the host must be reached via ``host.containers.internal``.
-    Returns the rewritten settings and the keys that changed.
+    operator runs on the host must be reached via the gateway
+    (``host.containers.internal`` for Podman). Returns the rewritten settings
+    and the keys that changed.
     """
     out = dict(settings)
-    changed: list[str] = []
-    for key in URL_KEYS:
-        value = out.get(key)
-        if isinstance(value, str) and (new := rewrite_loopback_url(value)):
-            out[key] = new
-            changed.append(key)
-    for key in HOST_KEYS:
-        value = out.get(key)
-        if isinstance(value, str) and (new := _rewrite_host(value)):
-            out[key] = new
-            changed.append(key)
+    changed = loopback_keys(settings)
+    for key in changed:
+        out[key] = rewrite_loopback_url(out[key], gateway) if key in URL_KEYS else gateway
     return out, changed
 
 
@@ -240,6 +262,10 @@ __all__ = [
     "load_defaults",
     "coerce_value",
     "merge_settings",
+    "is_loopback_host",
+    "is_loopback_url",
+    "loopback_keys",
+    "setting_in_use",
     "rewrite_loopback",
     "rewrite_loopback_url",
     "render_environment",

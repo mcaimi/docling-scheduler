@@ -216,6 +216,8 @@ def create_app(service: SchedulerService, *, port: int | None = None) -> FastAPI
             raise not_found(run_id) from None
         except InvalidState as e:
             raise HTTPException(status_code=409, detail=str(e)) from e
+        except ExecutorError as e:
+            raise HTTPException(status_code=502, detail=str(e)) from e
 
     @app.post("/api/runs/{run_id}/retry-failed")
     def retry_failed(run_id: str):

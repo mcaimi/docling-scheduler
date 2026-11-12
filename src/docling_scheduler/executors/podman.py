@@ -12,12 +12,13 @@ import uuid
 from typing import Any, Callable, Iterator
 
 from ..models import ResourceSample, RunSpec, RuntimeEvent, RuntimeStatus, ShardRuntime
-from ..settings_io import CONTAINER_DATA_DIR
+from ..settings_io import CONTAINER_DATA_DIR, CONTAINER_HOST_GATEWAY
 from .base import (
     LABEL_ATTEMPT,
     LABEL_MANAGED,
     LABEL_RUN_ID,
     LABEL_SHARD,
+    ExecutorCapabilities,
     ExecutorError,
     RunHandle,
 )
@@ -44,6 +45,9 @@ def _parse_size(value: Any) -> int | None:
 
 class PodmanExecutor:
     name = "podman"
+    capabilities = ExecutorCapabilities(
+        host_gateway=CONTAINER_HOST_GATEWAY, local_source=True, local_images=True
+    )
 
     def __init__(
         self,

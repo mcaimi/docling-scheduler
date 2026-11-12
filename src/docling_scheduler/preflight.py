@@ -24,6 +24,8 @@ from .models import RunRequest, RunTarget
 from .settings_io import (
     CONTAINER_DATA_DIR,
     CONTAINER_S3_CA_BUNDLE,
+    is_loopback_url,
+    loopback_keys,
     merge_settings,
     non_secret_settings,
     render_environment,
@@ -255,6 +257,7 @@ def run_preflight(
 ) -> Preflight:
     report = Preflight()
     target = request.target
+    capabilities = executor.capabilities
 
     # --- target --------------------------------------------------------
     if target.type != executor.name:
@@ -264,6 +267,12 @@ def run_preflight(
         report.error("target.image", "invalid image reference")
     elif not _image_allowed(image, config.image_allowlist):
         report.error("target.image", "image not in the allowlist (SCHEDULER_IMAGE_ALLOWLIST)")
+    elif not capabilities.local_images and image.startswith("localhost/"):
+        report.error(
+            "target.image",
+            f"the {executor.name} executor pulls images from a registry; "
+            "localhost/ images only exist on this machine",
+        )
     report.image = image
 
     if target.shards > config.max_shards:
@@ -281,6 +290,12 @@ def run_preflight(
     s3 = settings.get("source_backend") == "s3"
     if s3:
         paths = _s3_documents(settings, target, config, report, list_s3)
+    elif not capabilities.local_source:
+        report.error(
+            "settings.source_backend",
+            f"the {executor.name} executor can't mount host folders; use source_backend=s3",
+        )
+        paths = None
     else:
         paths = _local_documents(target, config, report)
     if paths is not None:
@@ -321,27 +336,51 @@ def run_preflight(
         )
 
     # --- endpoints -----------------------------------------------------
-    settings, rewritten = rewrite_loopback(settings)
-    if rewritten:
+    gateway = capabilities.host_gateway
+    if gateway is not None:
+        settings, rewritten = rewrite_loopback(settings, gateway)
+        if rewritten:
+            report.warnings.append(
+                f"loopback endpoints rewritten to {gateway}: " + ", ".join(rewritten)
+            )
+    else:
+        # a remote runtime can't reach services on this machine's loopback
+        for key in loopback_keys(settings, in_use_only=True):
+            report.error(
+                f"settings.{key}",
+                f"points at loopback, which {executor.name} containers can't reach",
+            )
         report.warnings.append(
-            "loopback endpoints rewritten to host.containers.internal: " + ", ".join(rewritten)
+            "endpoints are checked from this machine; "
+            f"{executor.name} containers must be able to reach them too"
         )
     tracking_uri = config.mlflow_tracking_uri
+    container_tracking_uri = config.container_mlflow_tracking_uri or tracking_uri
     if not tracking_uri.startswith(("http://", "https://")):
         report.error(
             "mlflow",
             "containers need an MLflow tracking server; a local file/sqlite store is not reachable",
         )
-        container_tracking_uri = tracking_uri
     else:
-        container_tracking_uri = rewrite_loopback_url(tracking_uri) or tracking_uri
         if (problem := check_mlflow(tracking_uri)) is not None:
             report.error("mlflow", problem)
+        if gateway is not None:
+            container_tracking_uri = (
+                rewrite_loopback_url(container_tracking_uri, gateway) or container_tracking_uri
+            )
+        elif is_loopback_url(container_tracking_uri):
+            report.error(
+                "mlflow",
+                f"{executor.name} containers can't reach a loopback MLflow URI; "
+                "set SCHEDULER_CONTAINER_MLFLOW_TRACKING_URI",
+            )
 
     # --- runtime -------------------------------------------------------
     availability = executor.available()
     if not availability.get("available"):
         report.error("target", f"{executor.name} unavailable: {availability.get('error')}")
+    elif not capabilities.local_images:
+        report.warnings.append(f"image {image} is pulled by {executor.name}; it isn't checked here")
     elif report.ok:
         try:
             if not executor.image_exists(image):
@@ -367,7 +406,7 @@ def run_preflight(
         "shards": target.shards,
         "source": s3_source_uri(settings) if s3 else report.host_folder,
         "mount": (
-            None if s3
+            None if s3 or not capabilities.local_source
             else {"source": report.host_folder, "target": CONTAINER_DATA_DIR, "read_only": True}
         ),
         "file_mounts": [

@@ -34,14 +34,18 @@ def main() -> int:
 
     from .api import create_app
     from .config import SchedulerConfig
-    from .executors import PodmanExecutor
+    from .executors import create_executor
     from .mlflow_monitor import MlflowMonitor
     from .registry import Registry
     from .service import SchedulerService
 
     logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper(), format="%(message)s")
     config = SchedulerConfig.from_env()
-    executor = PodmanExecutor(base_url=config.podman_url, relabel=config.podman_relabel)
+    try:
+        executor = create_executor(config)
+    except ValueError as e:
+        print(e)
+        return 2
     service = SchedulerService(
         config,
         Registry(config.db_path),

@@ -10,6 +10,7 @@ from typing import Any, Callable, Iterator
 
 from .config import SchedulerConfig
 from .contract import SETTINGS_BY_KEY, settings_schema
+from .executors import EXECUTOR_NAMES
 from .executors.base import Executor, ExecutorError
 from .mlflow_monitor import MlflowMonitor
 from .models import RunRequest, RunSpec, RuntimeStatus, to_dict
@@ -84,10 +85,11 @@ class SchedulerService:
         return {"values": non_secret_settings(defaults), "secrets": secret_presence(defaults)}
 
     def targets(self) -> dict[str, Any]:
+        inactive = {"available": False, "error": f"this scheduler runs the {self.executor.name} executor"}
         return {
             "executor": {"name": self.executor.name},
+            **{name: inactive for name in EXECUTOR_NAMES},
             self.executor.name: self.executor.available(),
-            "kubernetes": {"available": False, "error": "not implemented yet"},
             "mlflow": {
                 "tracking_uri": self.config.mlflow_tracking_uri,
                 "ui_uri": self.config.effective_mlflow_ui_uri,

@@ -11,10 +11,10 @@ from pydantic import BaseModel, Field
 
 class RunTarget(BaseModel):
     # must match the scheduler's executor (see /api/targets)
-    type: Literal["podman"] = "podman"
+    type: Literal["podman", "kubernetes"] = "podman"
     image: str | None = None
     # Mounted read-only as the document folder; required for
-    # source_backend=local, unused for s3.
+    # source_backend=local, unused for s3 (and not supported by kubernetes).
     host_folder: str | None = None
     shards: int = Field(default=1, ge=1)
     cpus: float | None = Field(default=None, gt=0)

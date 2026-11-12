@@ -19,11 +19,21 @@ def _default_db_path() -> Path:
     return Path(base) / "docling-agent" / "scheduler.db"
 
 
+def _optional_int(name: str) -> int | None:
+    raw = os.getenv(name)
+    return int(raw) if raw and raw.strip() else None
+
+
 @dataclass
 class SchedulerConfig:
+    # Container runtime: "podman" (local) or "kubernetes" (remote cluster).
+    executor: str = "podman"
     # MLflow server the scheduler monitors; containers reach the same server
     # (localhost is rewritten to host.containers.internal for Podman).
     mlflow_tracking_uri: str = "http://localhost:5000"
+    # Tracking URI rendered into containers when they reach MLflow by another
+    # address than the scheduler does (e.g. an in-cluster Service).
+    container_mlflow_tracking_uri: str | None = None
     # Base URL of the MLflow UI for deep links (defaults to the tracking URI
     # when that is an http(s) URL).
     mlflow_ui_uri: str | None = None
@@ -41,6 +51,14 @@ class SchedulerConfig:
     # SELinux relabel option for the read-only document mount ("z" = shared,
     # so all shard containers can read it; "" disables relabeling).
     podman_relabel: str = "z"
+    # Kubernetes executor: kubeconfig file and context (defaults: the usual
+    # kubeconfig lookup, then in-cluster config), namespace for run objects,
+    # optional image pull secret and per-shard deadline in seconds.
+    k8s_kubeconfig: str | None = None
+    k8s_context: str | None = None
+    k8s_namespace: str | None = None
+    k8s_image_pull_secret: str | None = None
+    k8s_active_deadline: int | None = None
     max_shards: int = 32
     # Pre-flight warns when shards x max_concurrency exceeds this.
     concurrency_warning_threshold: int = 32
@@ -69,9 +87,12 @@ class SchedulerConfig:
         if envfile is None and Path(".env").exists():
             envfile = ".env"
         return cls(
+            executor=(os.getenv("SCHEDULER_EXECUTOR") or defaults.executor).strip().lower(),
             mlflow_tracking_uri=os.getenv("SCHEDULER_MLFLOW_TRACKING_URI")
             or os.getenv("MLFLOW_TRACKING_URI")
             or defaults.mlflow_tracking_uri,
+            container_mlflow_tracking_uri=os.getenv("SCHEDULER_CONTAINER_MLFLOW_TRACKING_URI")
+            or None,
             mlflow_ui_uri=os.getenv("SCHEDULER_MLFLOW_UI_URI") or None,
             db_path=Path(os.getenv("SCHEDULER_DB_PATH") or defaults.db_path),
             envfile=envfile or None,
@@ -82,6 +103,11 @@ class SchedulerConfig:
             ),
             podman_url=os.getenv("SCHEDULER_PODMAN_URL") or None,
             podman_relabel=os.getenv("SCHEDULER_PODMAN_RELABEL", defaults.podman_relabel),
+            k8s_kubeconfig=os.getenv("SCHEDULER_K8S_KUBECONFIG") or None,
+            k8s_context=os.getenv("SCHEDULER_K8S_CONTEXT") or None,
+            k8s_namespace=os.getenv("SCHEDULER_K8S_NAMESPACE") or None,
+            k8s_image_pull_secret=os.getenv("SCHEDULER_K8S_IMAGE_PULL_SECRET") or None,
+            k8s_active_deadline=_optional_int("SCHEDULER_K8S_ACTIVE_DEADLINE"),
             max_shards=int(os.getenv("SCHEDULER_MAX_SHARDS") or defaults.max_shards),
             concurrency_warning_threshold=int(
                 os.getenv("SCHEDULER_CONCURRENCY_WARNING")
