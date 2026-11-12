@@ -1,0 +1,7 @@
+# OpenShift, after the scheduler component: exposes the UI and API over TLS
+# (edge-terminated at the router). Put the same hostname in
+# SCHEDULER_ALLOWED_HOSTS / SCHEDULER_ALLOWED_ORIGINS (scheduler.env).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - route.yaml

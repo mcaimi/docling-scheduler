@@ -1,0 +1,24 @@
+# Runs the scheduler itself in the namespace, as the docling-scheduler service
+# account (in-cluster config, Jobs in the same namespace), behind a ClusterIP
+# Service. Expose it with components/scheduler-route (OpenShift) or
+# components/scheduler-ingress (Kubernetes), then open
+# https://<hostname>/#token=<SCHEDULER_TOKEN>. Without either:
+#
+#   kubectl -n docling port-forward svc/docling-scheduler 8765
+#   kubectl -n docling logs deploy/docling-scheduler   # prints the token
+#
+# Edit scheduler.env (or replace the ConfigMap in your overlay) and set the image:
+#   kustomize edit set image docling-scheduler=quay.io/you/docling-scheduler:tag
+# Optional Secrets, created out of band:
+#   docling-scheduler-auth   key SCHEDULER_TOKEN (stable token across restarts)
+#   docling-scheduler-agent  key agent.env (agent .env: form defaults, S3/API keys)
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+configMapGenerator:
+  - name: docling-scheduler
+    envs:
+      - scheduler.env

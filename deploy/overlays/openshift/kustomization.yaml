@@ -10,3 +10,6 @@ components:
   - ../../components/quota
   - ../../components/networkpolicy
   # - ../../components/service-account-token
+  # in-cluster scheduler (see components/scheduler):
+  # - ../../components/scheduler
+  # - ../../components/scheduler-route

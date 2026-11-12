@@ -1,0 +1,11 @@
+# Run registry (SQLite metadata, no secrets).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: docling-scheduler-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

@@ -1,0 +1,16 @@
+# Vanilla Kubernetes only, after the scheduler component: makes the data
+# volume writable by the image's UID (OpenShift assigns an fsGroup itself and
+# rejects one outside the namespace range).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - target:
+      kind: Deployment
+      name: docling-scheduler
+    patch: |-
+      - op: add
+        path: /spec/template/spec/securityContext/runAsUser
+        value: 1001
+      - op: add
+        path: /spec/template/spec/securityContext/fsGroup
+        value: 1001

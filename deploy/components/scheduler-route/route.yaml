@@ -1,0 +1,19 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: docling-scheduler
+  labels:
+    app.kubernetes.io/name: docling-scheduler
+  annotations:
+    # log streams (SSE) stay open longer than the router's 30s default
+    haproxy.router.openshift.io/timeout: 1h
+spec:
+  host: docling-scheduler.apps.example.com
+  to:
+    kind: Service
+    name: docling-scheduler
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

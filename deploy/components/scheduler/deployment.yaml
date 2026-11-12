@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docling-scheduler
+  labels:
+    app.kubernetes.io/name: docling-scheduler
+spec:
+  replicas: 1
+  # one SQLite writer on a ReadWriteOnce volume: never two pods at once
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: docling-scheduler
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: docling-scheduler
+    spec:
+      serviceAccountName: docling-scheduler
+      # no runAsUser: OpenShift assigns one from the namespace range
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: scheduler
+          image: docling-scheduler:latest
+          ports:
+            - name: http
+              containerPort: 8765
+          # the API only answers allowed Host headers: probes send localhost
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: localhost
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: localhost
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          envFrom:
+            - configMapRef:
+                name: docling-scheduler
+          env:
+            - name: SCHEDULER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: docling-scheduler-auth
+                  key: SCHEDULER_TOKEN
+                  optional: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: home
+              mountPath: /opt/app-root/home
+            - name: tmp
+              mountPath: /tmp
+            - name: agent-env
+              mountPath: /etc/docling-scheduler
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: docling-scheduler-data
+        - name: home
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: agent-env
+          secret:
+            secretName: docling-scheduler-agent
+            optional: true
