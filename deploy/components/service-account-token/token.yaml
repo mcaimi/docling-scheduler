@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: docling-scheduler-token
+  annotations:
+    kubernetes.io/service-account.name: docling-scheduler
+type: kubernetes.io/service-account-token

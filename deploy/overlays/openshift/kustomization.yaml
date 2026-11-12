@@ -1,0 +1,12 @@
+# OpenShift: agent pods run under the default restricted-v2 SCC (arbitrary
+# UID, no capabilities); no extra SCC is granted.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: docling
+resources:
+  - namespace.yaml
+  - ../../base
+components:
+  - ../../components/quota
+  - ../../components/networkpolicy
+  # - ../../components/service-account-token

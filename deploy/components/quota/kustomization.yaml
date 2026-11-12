@@ -1,0 +1,5 @@
+# Caps what all runs in the namespace can use at once.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - resourcequota.yaml

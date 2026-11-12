@@ -1,0 +1,10 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: docling-agent-deny-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: docling-agent
+  policyTypes:
+    - Ingress

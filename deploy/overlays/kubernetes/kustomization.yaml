@@ -1,0 +1,12 @@
+# Vanilla Kubernetes: the namespace enforces the restricted Pod Security
+# Standard, which agent pods are built to meet.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: docling
+resources:
+  - namespace.yaml
+  - ../../base
+components:
+  - ../../components/quota
+  - ../../components/networkpolicy
+  # - ../../components/service-account-token

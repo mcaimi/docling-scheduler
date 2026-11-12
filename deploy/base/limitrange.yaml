@@ -1,0 +1,15 @@
+# Requests/limits for agent pods launched without target.cpus/target.memory.
+# Docling conversion is memory hungry: size these for your documents.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: docling-agent-defaults
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+        cpu: "1"
+        memory: 4Gi
+      default:
+        cpu: "2"
+        memory: 4Gi

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: docling-agent
+spec:
+  hard:
+    # running pods only (finished ones don't count): roughly the shards in
+    # flight across all runs. Jobs are kept until their run is deleted, so
+    # they aren't capped here.
+    pods: "32"
+    requests.cpu: "32"
+    requests.memory: 128Gi
+    limits.cpu: "64"
+    limits.memory: 128Gi

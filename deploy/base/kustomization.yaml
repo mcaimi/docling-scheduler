@@ -1,0 +1,13 @@
+# Namespace-scoped resources the scheduler needs on the cluster. Apply an
+# overlay, not the base: overlays set the namespace and its security policy.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: docling-scheduler
+    includeSelectors: false
+resources:
+  - serviceaccount.yaml
+  - role.yaml
+  - rolebinding.yaml
+  - limitrange.yaml

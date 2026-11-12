@@ -1,0 +1,6 @@
+# Agent pods accept no inbound traffic; egress (S3, MLflow, embedding and
+# vector store endpoints) stays open.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - networkpolicy.yaml

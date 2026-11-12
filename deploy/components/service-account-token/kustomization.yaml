@@ -1,0 +1,7 @@
+# Long-lived token for the scheduler's kubeconfig. Prefer short-lived tokens
+# (`oc create token` / `kubectl create token`); enable this only when the
+# scheduler must run unattended for longer than a token's lifetime.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - token.yaml
