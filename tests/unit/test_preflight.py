@@ -5,7 +5,8 @@ import pytest
 from botocore.exceptions import ClientError
 
 from docling_scheduler.config import SchedulerConfig
-from docling_scheduler.models import PodmanTarget, RunRequest
+from docling_scheduler.executors.kubernetes import KubernetesExecutor
+from docling_scheduler.models import PodmanTarget, RunRequest, RunTarget
 from docling_scheduler.preflight import run_preflight
 from docling_scheduler.settings_io import load_defaults
 from docling_scheduler.contract import SETTINGS_SPEC
@@ -255,3 +256,86 @@ def test_s3_ca_bundle_is_mounted(tmp_path, config, env):
     assert "settings.s3_ca_bundle" in fields(
         check(request(None, {**S3, "s3_ca_bundle": str(tmp_path)}), config, env, list_s3=Lister())
     )
+
+
+class KubeExecutor(FakeExecutor):
+    name = "kubernetes"
+    capabilities = KubernetesExecutor.capabilities
+
+
+REMOTE_S3 = {**S3, "s3_endpoint_url": "https://s3.example.com"}
+
+
+def kube_request(settings=None, folder=None, **target):
+    target = {"type": "kubernetes", "image": "quay.io/acme/docling-agent:1.0", **target}
+    return RunRequest(
+        settings=settings if settings is not None else REMOTE_S3,
+        target=RunTarget(host_folder=str(folder) if folder else None, **target),
+    )
+
+
+@pytest.fixture
+def kube_config(tmp_path):
+    return SchedulerConfig(
+        executor="kubernetes",
+        allowed_mount_roots=[str(tmp_path)],
+        db_path=tmp_path / "db",
+        image_allowlist=["quay.io/acme/docling-agent"],
+        mlflow_tracking_uri="https://mlflow.apps.example.com",
+        container_mlflow_tracking_uri="http://mlflow.mlflow.svc:5000",
+    )
+
+
+def test_kubernetes_s3_run(kube_config, env):
+    executor = KubeExecutor()
+    executor.images = set()  # never consulted: the cluster pulls the image
+    report = check(kube_request(shards=2), kube_config, env, executor, list_s3=Lister())
+    assert report.ok, report.errors
+    assert report.document_count == 3
+    assert report.env["S3_ENDPOINT_URL"] == "https://s3.example.com"
+    assert report.env["MLFLOW_TRACKING_URI"] == "http://mlflow.mlflow.svc:5000"
+    assert report.env["SCHEDULER_EXECUTOR"] == "kubernetes"
+    assert "FOLDER_PATH" not in report.env
+    assert any("pulled by kubernetes" in w for w in report.warnings)
+    assert any("must be able to reach them" in w for w in report.warnings)
+
+
+def test_kubernetes_rejects_local_sources(kube_config, env, docs):
+    report = check(kube_request({}, folder=docs), kube_config, env, KubeExecutor())
+    assert "settings.source_backend" in fields(report)
+    assert report.host_folder == "" and report.preview["mount"] is None
+
+
+def test_kubernetes_rejects_loopback_endpoints(kube_config, env):
+    settings = {**S3, "vector_store_backend": "chroma", "chroma_host": "localhost"}
+    report = check(kube_request(settings), kube_config, env, KubeExecutor(), list_s3=Lister())
+    assert {"settings.s3_endpoint_url", "settings.chroma_host"} <= fields(report)
+    assert not any("rewritten" in w for w in report.warnings)
+
+
+def test_kubernetes_mlflow_uri_must_be_reachable_from_the_cluster(kube_config, env, tmp_path):
+    loopback = SchedulerConfig(
+        executor="kubernetes", db_path=tmp_path / "db", image_allowlist=["quay.io/acme/docling-agent"],
+        mlflow_tracking_uri="http://localhost:5000",
+    )
+    report = check(kube_request(), loopback, env, KubeExecutor(), list_s3=Lister())
+    assert "mlflow" in fields(report)
+    assert any("SCHEDULER_CONTAINER_MLFLOW_TRACKING_URI" in e["message"] for e in report.errors)
+    # a port-forwarded MLflow for the scheduler, a Service URL for the pods
+    loopback.container_mlflow_tracking_uri = "http://mlflow.mlflow.svc:5000"
+    assert check(kube_request(), loopback, env, KubeExecutor(), list_s3=Lister()).ok
+
+
+def test_kubernetes_rejects_localhost_images(kube_config, env):
+    kube_config.image_allowlist = ["localhost/docling-agent"]
+    report = check(
+        kube_request(image="localhost/docling-agent:latest"), kube_config, env, KubeExecutor(),
+        list_s3=Lister(),
+    )
+    assert "target.image" in fields(report)
+
+
+def test_podman_uses_container_mlflow_uri_with_rewrite(docs, config, env):
+    config.container_mlflow_tracking_uri = "http://127.0.0.1:5001"
+    report = check(request(docs), config, env)
+    assert report.env["MLFLOW_TRACKING_URI"] == "http://host.containers.internal:5001"

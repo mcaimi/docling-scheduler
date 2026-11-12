@@ -9,6 +9,7 @@ from docling_scheduler.settings_io import (
     MANAGED_KEYS,
     coerce_value,
     load_defaults,
+    loopback_keys,
     merge_settings,
     render_environment,
     rewrite_loopback,
@@ -127,6 +128,29 @@ def test_rewrite_loopback_settings(defaults):
     assert settings["milvus_uri"] == f"http://{CONTAINER_HOST_GATEWAY}:19530"
     assert settings["chroma_host"] == CONTAINER_HOST_GATEWAY
     assert set(changed) == {"milvus_uri", "chroma_host"}
+
+
+def test_rewrite_loopback_to_another_gateway(defaults):
+    settings, changed = rewrite_loopback({**defaults, "chroma_host": "localhost"}, "gw.internal")
+    assert settings["chroma_host"] == "gw.internal"
+    assert settings["milvus_uri"] == "http://gw.internal:19530"
+    assert set(changed) == {"milvus_uri", "chroma_host"}
+    assert rewrite_loopback_url("http://localhost:9000/x", "gw.internal") == "http://gw.internal:9000/x"
+
+
+def test_loopback_keys(defaults):
+    settings = {
+        **defaults,
+        "base_url": "http://0.0.0.0:8000/v1",
+        "embedding_base_url": "https://api.openai.com/v1",
+        "chroma_host": "chroma.svc",
+        "s3_endpoint_url": "http://[::1]:9000",
+    }
+    # the default milvus_uri is loopback, but only used with the milvus backend
+    assert loopback_keys(settings) == ["base_url", "milvus_uri", "s3_endpoint_url"]
+    assert loopback_keys(settings, in_use_only=True) == ["base_url"]
+    s3_chroma = {**settings, "source_backend": "s3", "vector_store_backend": "chroma", "chroma_host": "LOCALHOST"}
+    assert loopback_keys(s3_chroma, in_use_only=True) == ["base_url", "s3_endpoint_url", "chroma_host"]
 
 
 def test_render_environment_splits_secrets_and_skips_managed(defaults):
