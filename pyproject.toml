@@ -1,7 +1,7 @@
 [project]
 name = "docling-scheduler"
 version = "0.1.0"
-description = "Launches and monitors containerised docling-agent runs (Podman + MLflow)"
+description = "Launches and monitors containerised docling-agent runs (Podman or Kubernetes + MLflow)"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -17,6 +17,9 @@ dependencies = [
 dev = [
     "httpx2>=2.16.0",
     "pytest>=8.0.0",
+]
+k8s = [
+    "kubernetes>=31.0.0",
 ]
 
 [project.scripts]
