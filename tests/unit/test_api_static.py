@@ -69,3 +69,11 @@ def test_schema_marks_managed_settings(client):
     managed = {e["key"] for e in schema if e["managed"]}
     assert {"folder_path", "enable_tracing", "mlflow_tracking_uri", "shard_index"} <= managed
     assert "chunk_size" not in managed
+
+
+def test_targets_report_executor_capabilities(client):
+    executor = client.get("/api/targets", headers={"Authorization": "Bearer tok"}).json()["executor"]
+    assert executor == {
+        "name": "podman",
+        "capabilities": {"host_gateway": "host.containers.internal", "local_source": True, "local_images": True},
+    }

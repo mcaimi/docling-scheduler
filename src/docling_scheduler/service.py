@@ -6,6 +6,7 @@ import logging
 import threading
 import time
 import uuid
+from dataclasses import asdict
 from typing import Any, Callable, Iterator
 
 from .config import SchedulerConfig
@@ -87,7 +88,10 @@ class SchedulerService:
     def targets(self) -> dict[str, Any]:
         inactive = {"available": False, "error": f"this scheduler runs the {self.executor.name} executor"}
         return {
-            "executor": {"name": self.executor.name},
+            "executor": {
+                "name": self.executor.name,
+                "capabilities": asdict(self.executor.capabilities),
+            },
             **{name: inactive for name in EXECUTOR_NAMES},
             self.executor.name: self.executor.available(),
             "mlflow": {
