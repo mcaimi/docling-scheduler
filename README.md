@@ -87,7 +87,7 @@ With `SCHEDULER_EXECUTOR=kubernetes`, the scheduler still runs on your machine, 
      uv run python -m docling_scheduler
    ```
 
-   Requests use `"target": {"type": "kubernetes", ...}`. `/api/targets` reports which executor is active.
+   Requests use `"target": {"type": "kubernetes", ...}`. `/api/targets` reports which executor is active and its capabilities (`host_gateway`, `local_source`, `local_images`).
 
 How runs behave on a cluster:
 
