@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 """HTTP API of the scheduler (FastAPI).
 
-Security model: the server binds to loopback only and holds the power to
-start containers, so every ``/api`` route except ``/api/health`` requires the
+Security model: the server binds to loopback by default (``--host`` can
+widen it, e.g. behind a Kubernetes Service) and holds the power to start
+containers, so every ``/api`` route except ``/api/health`` requires the
 startup token (``Authorization: Bearer <token>``; the log stream also accepts
 ``?token=`` because ``EventSource`` cannot set headers). Requests must carry
 an allowed ``Host`` header (DNS-rebinding defence), and state-changing
