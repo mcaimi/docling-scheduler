@@ -247,6 +247,9 @@ class FakeKubeCore:
     def delete_namespaced_config_map(self, name, namespace, propagation_policy=None):
         self.cluster.delete("configmaps", name)
 
+    def read_namespaced_service_account(self, name, namespace):
+        return self.cluster.get("serviceaccounts", name)
+
     def create_namespaced_secret(self, namespace, body):
         return self.cluster.create("secrets", namespace, body)
 
@@ -328,7 +331,7 @@ class FakeKubeCluster:
     garbage collection and a hand-driven 'Job controller' (``add_pod``)."""
 
     def __init__(self):
-        self.objects = {"configmaps": {}, "secrets": {}, "jobs": {}, "pods": {}}
+        self.objects = {"configmaps": {}, "secrets": {}, "jobs": {}, "pods": {}, "serviceaccounts": {}}
         self.namespaces: list[str] = []
         self.denied: set[tuple[str, str]] = set()
         self.fail_job_create_after: int | None = None

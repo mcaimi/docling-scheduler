@@ -83,6 +83,7 @@ def test_submit_creates_jobs_owned_by_the_run_anchor(executor, cluster):
     pod_spec = job["spec"]["template"]["spec"]
     assert pod_spec["restartPolicy"] == "Never"
     assert pod_spec["automountServiceAccountToken"] is False
+    assert "serviceAccountName" not in pod_spec
     assert pod_spec["securityContext"] == {"runAsNonRoot": True, "seccompProfile": {"type": "RuntimeDefault"}}
     assert pod_spec["imagePullSecrets"] == [{"name": "registry-creds"}]
     container = container_of(job)
@@ -323,6 +324,22 @@ def test_available_checks_permissions(executor, cluster):
     result = executor.available()
     assert not result["available"]
     assert "create jobs" in result["error"] and "get pods/log" in result["error"]
+
+
+def test_service_account_mounts_its_token(cluster):
+    executor = KubernetesExecutor(namespace="docling", service_account="docling-agent", api_factory=cluster.apis)
+    result = executor.available()
+    assert not result["available"]
+    assert result["error"] == "service account docling-agent not found in namespace docling"
+    cluster.objects["serviceaccounts"]["docling-agent"] = {"metadata": {"name": "docling-agent"}}
+    assert executor.available()["available"]
+    cluster.denied = {("get", "serviceaccounts")}
+    assert "get serviceaccounts" in executor.available()["error"]
+
+    handle = executor.submit(spec())
+    pod_spec = job_of(cluster, handle, 0)["spec"]["template"]["spec"]
+    assert pod_spec["serviceAccountName"] == "docling-agent"
+    assert pod_spec["automountServiceAccountToken"] is True
 
 
 def test_capabilities_and_images(executor):

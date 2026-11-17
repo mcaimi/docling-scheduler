@@ -296,8 +296,16 @@ def test_kubernetes_s3_run(kube_config, env):
     assert report.env["MLFLOW_TRACKING_URI"] == "http://mlflow.mlflow.svc:5000"
     assert report.env["SCHEDULER_EXECUTOR"] == "kubernetes"
     assert "FOLDER_PATH" not in report.env
+    assert "MLFLOW_TRACKING_AUTH" not in report.env
     assert any("pulled by kubernetes" in w for w in report.warnings)
     assert any("must be able to reach them" in w for w in report.warnings)
+
+
+def test_kubernetes_mlflow_auth_is_rendered(kube_config, env):
+    kube_config.container_mlflow_tracking_auth = "kubernetes-namespaced"
+    report = check(kube_request(), kube_config, env, KubeExecutor(), list_s3=Lister())
+    assert report.ok, report.errors
+    assert report.env["MLFLOW_TRACKING_AUTH"] == "kubernetes-namespaced"
 
 
 def test_kubernetes_rejects_local_sources(kube_config, env, docs):
