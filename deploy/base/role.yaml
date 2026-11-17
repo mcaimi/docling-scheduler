@@ -25,7 +25,17 @@ rules:
   - apiGroups: [""]
     resources: ["events"]
     verbs: ["list"]
+  # pre-flight: the agent pods' service account (SCHEDULER_K8S_SERVICE_ACCOUNT) exists
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get"]
   # optional: resource usage, when metrics-server is installed
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods"]
     verbs: ["get", "list"]
+  # optional: MLflow with Kubernetes RBAC (OpenShift AI, MLFLOW_TRACKING_AUTH=kubernetes*);
+  # experiments covers runs, metrics, artifacts and traces. Parent runs are created,
+  # tagged and closed; nothing is deleted.
+  - apiGroups: ["mlflow.kubeflow.org"]
+    resources: ["experiments"]
+    verbs: ["get", "list", "create", "update"]

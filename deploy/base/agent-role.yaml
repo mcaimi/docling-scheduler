@@ -1,0 +1,10 @@
+# MLflow access of agent pods (see agent-serviceaccount.yaml): child runs,
+# metrics, artifacts and traces all fall under experiments.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: docling-agent
+rules:
+  - apiGroups: ["mlflow.kubeflow.org"]
+    resources: ["experiments"]
+    verbs: ["get", "list", "create", "update"]

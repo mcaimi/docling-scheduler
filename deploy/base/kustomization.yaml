@@ -11,3 +11,6 @@ resources:
   - role.yaml
   - rolebinding.yaml
   - limitrange.yaml
+  - agent-serviceaccount.yaml
+  - agent-role.yaml
+  - agent-rolebinding.yaml
