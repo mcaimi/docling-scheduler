@@ -94,7 +94,8 @@ How runs behave on a cluster:
 - **S3 only.** Nothing on your machine is mounted, so `source_backend=local` fails pre-flight. Pre-flight still lists the bucket from your machine to plan the shards.
 - **No loopback endpoints.** MLflow, S3, embedding, LLM and vector store endpoints must be reachable from the cluster. Pre-flight rejects any `localhost` endpoint that the run would use, instead of rewriting it. If you reach MLflow through a port-forward or Route but pods should use an in-cluster Service, set `SCHEDULER_CONTAINER_MLFLOW_TRACKING_URI`.
 - **Run objects.** Each run gets an anchor ConfigMap `docling-run-<id>` that owns its Jobs, Secret and file ConfigMap. Deleting a run deletes the anchor, and the cluster garbage-collects the rest. Sensitive settings go into a per-submission Secret, referenced with `secretKeyRef` and deleted when the run ends. A host `s3_ca_bundle` is copied into a ConfigMap.
-- **Pods.** Pods run non-root with every capability dropped, no privilege escalation, `RuntimeDefault` seccomp and no service account token. `target.cpus` / `target.memory` become requests and limits (`4g` → `4Gi`), and the LimitRange covers runs that don't set them. Each Job has `backoffLimit: 0`; "retry failed shards" adds a new Job per shard. Set `SCHEDULER_K8S_ACTIVE_DEADLINE` to cap a shard's runtime.
+- **Pods.** Pods run non-root with every capability dropped, no privilege escalation, `RuntimeDefault` seccomp and no service account token, unless `SCHEDULER_K8S_SERVICE_ACCOUNT` is set. `target.cpus` / `target.memory` become requests and limits (`4g` → `4Gi`), and the LimitRange covers runs that don't set them. Each Job has `backoffLimit: 0`; "retry failed shards" adds a new Job per shard. Set `SCHEDULER_K8S_ACTIVE_DEADLINE` to cap a shard's runtime.
+- **MLflow with Kubernetes RBAC** (OpenShift AI). The MLflow server authorizes every request against `mlflow.kubeflow.org` resources in the caller's namespace. The scheduler's Role grants it `experiments` access, and inside a pod `entrypoint.sh` sets `MLFLOW_TRACKING_AUTH=kubernetes-namespaced`. For agent pods, set `SCHEDULER_K8S_SERVICE_ACCOUNT=docling-agent` (the base's MLflow-only service account, with no Kubernetes API access) and `SCHEDULER_CONTAINER_MLFLOW_TRACKING_AUTH=kubernetes-namespaced`. Pods then mount that account's token, and the agent image needs `mlflow[kubernetes]`. The namespace must be an MLflow workspace.
 - **Stuck pods.** A pod that can never start (`ImagePullBackOff`, `CreateContainerConfigError`, …) fails its shard, so the run can be retried instead of staying pending.
 - **Cancel** suspends the Jobs. Pods get SIGTERM and are removed, so their logs go away unless the cluster ships logs elsewhere. Logs of finished pods remain available until the run is deleted.
 - **Telemetry** needs metrics-server, and is empty without it. Events are read from the namespace, so use a namespace dedicated to these runs.
@@ -132,6 +133,7 @@ Form defaults and secrets come from `.env` (or `SCHEDULER_ENVFILE`), using the a
 | `SCHEDULER_EXECUTOR` | `podman` (or `kubernetes`) |
 | `SCHEDULER_MLFLOW_TRACKING_URI` (fallback `MLFLOW_TRACKING_URI`) | `http://localhost:5000` |
 | `SCHEDULER_CONTAINER_MLFLOW_TRACKING_URI` | tracking URI (loopback rewritten for Podman) |
+| `SCHEDULER_CONTAINER_MLFLOW_TRACKING_AUTH` | none (`MLFLOW_TRACKING_AUTH` for containers; `kubernetes*` needs `SCHEDULER_K8S_SERVICE_ACCOUNT`) |
 | `SCHEDULER_MLFLOW_UI_URI` | tracking URI |
 | `SCHEDULER_DEFAULT_IMAGE` | `localhost/docling-agent:latest` |
 | `SCHEDULER_IMAGE_ALLOWLIST` | `localhost/docling-agent,docling-agent` |
@@ -139,6 +141,7 @@ Form defaults and secrets come from `.env` (or `SCHEDULER_ENVFILE`), using the a
 | `SCHEDULER_PODMAN_URL` / `SCHEDULER_PODMAN_RELABEL` | podman-py default / `z` |
 | `SCHEDULER_K8S_NAMESPACE` | required with `kubernetes` |
 | `SCHEDULER_K8S_KUBECONFIG` / `SCHEDULER_K8S_CONTEXT` | standard kubeconfig lookup, then in-cluster config / current context |
+| `SCHEDULER_K8S_SERVICE_ACCOUNT` | none (agent pods run without a token) |
 | `SCHEDULER_K8S_IMAGE_PULL_SECRET` | none |
 | `SCHEDULER_K8S_ACTIVE_DEADLINE` | none (seconds per shard) |
 | `SCHEDULER_MAX_SHARDS` / `SCHEDULER_CONCURRENCY_WARNING` | `32` / `32` |
