@@ -35,6 +35,7 @@ else
 fi
 default SCHEDULER_K8S_KUBECONFIG "" # unset: in-cluster config
 default SCHEDULER_K8S_CONTEXT ""
+default SCHEDULER_K8S_SERVICE_ACCOUNT ""  # unset: agent pods run without a token
 default SCHEDULER_K8S_IMAGE_PULL_SECRET ""
 default SCHEDULER_K8S_ACTIVE_DEADLINE "" # seconds per shard
 default SCHEDULER_PODMAN_URL ""          # e.g. unix:///run/podman/podman.sock
@@ -48,6 +49,7 @@ default SCHEDULER_ALLOWED_MOUNT_ROOTS "" # Podman host folders only
 # --- MLflow --------------------------------------------------------------------
 default SCHEDULER_MLFLOW_TRACKING_URI "${MLFLOW_TRACKING_URI:-}"
 default SCHEDULER_CONTAINER_MLFLOW_TRACKING_URI ""
+default SCHEDULER_CONTAINER_MLFLOW_TRACKING_AUTH "" # e.g. kubernetes-namespaced
 default SCHEDULER_MLFLOW_UI_URI ""
 
 # --- state, settings and UI ------------------------------------------------------
