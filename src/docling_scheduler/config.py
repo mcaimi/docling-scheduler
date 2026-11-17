@@ -34,6 +34,9 @@ class SchedulerConfig:
     # Tracking URI rendered into containers when they reach MLflow by another
     # address than the scheduler does (e.g. an in-cluster Service).
     container_mlflow_tracking_uri: str | None = None
+    # MLFLOW_TRACKING_AUTH rendered into containers (e.g. kubernetes-namespaced
+    # for an MLflow server that authorizes with Kubernetes RBAC).
+    container_mlflow_tracking_auth: str | None = None
     # Base URL of the MLflow UI for deep links (defaults to the tracking URI
     # when that is an http(s) URL).
     mlflow_ui_uri: str | None = None
@@ -53,10 +56,12 @@ class SchedulerConfig:
     podman_relabel: str = "z"
     # Kubernetes executor: kubeconfig file and context (defaults: the usual
     # kubeconfig lookup, then in-cluster config), namespace for run objects,
-    # optional image pull secret and per-shard deadline in seconds.
+    # optional service account for agent pods (its token is mounted only when
+    # set), image pull secret and per-shard deadline in seconds.
     k8s_kubeconfig: str | None = None
     k8s_context: str | None = None
     k8s_namespace: str | None = None
+    k8s_service_account: str | None = None
     k8s_image_pull_secret: str | None = None
     k8s_active_deadline: int | None = None
     max_shards: int = 32
@@ -93,6 +98,8 @@ class SchedulerConfig:
             or defaults.mlflow_tracking_uri,
             container_mlflow_tracking_uri=os.getenv("SCHEDULER_CONTAINER_MLFLOW_TRACKING_URI")
             or None,
+            container_mlflow_tracking_auth=os.getenv("SCHEDULER_CONTAINER_MLFLOW_TRACKING_AUTH")
+            or None,
             mlflow_ui_uri=os.getenv("SCHEDULER_MLFLOW_UI_URI") or None,
             db_path=Path(os.getenv("SCHEDULER_DB_PATH") or defaults.db_path),
             envfile=envfile or None,
@@ -106,6 +113,7 @@ class SchedulerConfig:
             k8s_kubeconfig=os.getenv("SCHEDULER_K8S_KUBECONFIG") or None,
             k8s_context=os.getenv("SCHEDULER_K8S_CONTEXT") or None,
             k8s_namespace=os.getenv("SCHEDULER_K8S_NAMESPACE") or None,
+            k8s_service_account=os.getenv("SCHEDULER_K8S_SERVICE_ACCOUNT") or None,
             k8s_image_pull_secret=os.getenv("SCHEDULER_K8S_IMAGE_PULL_SECRET") or None,
             k8s_active_deadline=_optional_int("SCHEDULER_K8S_ACTIVE_DEADLINE"),
             max_shards=int(os.getenv("SCHEDULER_MAX_SHARDS") or defaults.max_shards),

@@ -396,6 +396,8 @@ def run_preflight(
         "SHARD_COUNT": str(target.shards),
         "SCHEDULER_EXECUTOR": executor.name,
     }
+    if config.container_mlflow_tracking_auth:
+        managed["MLFLOW_TRACKING_AUTH"] = config.container_mlflow_tracking_auth
     if not s3:
         managed["FOLDER_PATH"] = CONTAINER_DATA_DIR
     env, secret_env = render_environment(settings, explicit_keys=explicit, managed=managed)

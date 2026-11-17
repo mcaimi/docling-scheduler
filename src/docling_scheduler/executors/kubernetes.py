@@ -10,7 +10,9 @@ CA bundle) are copied into a ConfigMap.
 
 Pods run under the namespace's restricted policy (OpenShift ``restricted-v2``,
 Pod Security ``restricted``): non-root with an arbitrary UID, no capabilities,
-no privilege escalation, ``RuntimeDefault`` seccomp, no service account token.
+no privilege escalation, ``RuntimeDefault`` seccomp, and no service account
+token unless a service account is configured (e.g. for an MLflow server that
+authorizes with Kubernetes RBAC).
 """
 
 import base64
@@ -175,11 +177,13 @@ class KubernetesExecutor:
         namespace: str,
         kubeconfig: str | None = None,
         context: str | None = None,
+        service_account: str | None = None,
         image_pull_secret: str | None = None,
         active_deadline: int | None = None,
         api_factory: Callable[[], KubeApis] | None = None,
     ):
         self.namespace = namespace
+        self._service_account = service_account
         self._image_pull_secret = image_pull_secret
         self._active_deadline = active_deadline
         self._api_factory = api_factory or _default_api_factory(kubeconfig, context)
@@ -202,11 +206,14 @@ class KubernetesExecutor:
     # --- discovery -------------------------------------------------------
 
     def available(self) -> dict[str, Any]:
+        required = _REQUIRED_ACCESS
+        if self._service_account:
+            required += (("get", "", "serviceaccounts", ""),)
         try:
             version = self._to_dict(self.apis.version.get_code()).get("gitVersion")
             missing = [
                 f"{verb} {resource}{'/' + subresource if subresource else ''}"
-                for verb, group, resource, subresource in _REQUIRED_ACCESS
+                for verb, group, resource, subresource in required
                 if not self._allowed(verb, group, resource, subresource)
             ]
         except Exception as e:
@@ -219,6 +226,17 @@ class KubernetesExecutor:
                 "error": f"missing permissions in namespace {self.namespace}: {', '.join(missing)}",
                 **details,
             }
+        if self._service_account:
+            # Jobs can't create pods under a missing service account, and their
+            # shards would stay pending without an error
+            try:
+                self.apis.core.read_namespaced_service_account(self._service_account, self.namespace)
+            except Exception as e:
+                error = (
+                    f"service account {self._service_account} not found in namespace {self.namespace}"
+                    if _not_found(e) else str(e)
+                )
+                return {"available": False, "error": error, **details}
         return {"available": True, **details}
 
     def _allowed(self, verb: str, group: str, resource: str, subresource: str) -> bool:
@@ -401,7 +419,8 @@ class KubernetesExecutor:
             mounts += files[1]
         pod_spec: dict[str, Any] = {
             "restartPolicy": "Never",
-            "automountServiceAccountToken": False,
+            # the token is mounted only for a configured service account
+            "automountServiceAccountToken": bool(self._service_account),
             "enableServiceLinks": False,
             "securityContext": {"runAsNonRoot": True, "seccompProfile": {"type": "RuntimeDefault"}},
             "containers": [
@@ -420,6 +439,8 @@ class KubernetesExecutor:
             ],
             "volumes": volumes,
         }
+        if self._service_account:
+            pod_spec["serviceAccountName"] = self._service_account
         if self._image_pull_secret:
             pod_spec["imagePullSecrets"] = [{"name": self._image_pull_secret}]
         spec: dict[str, Any] = {

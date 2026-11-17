@@ -13,6 +13,15 @@ def create_executor(config: SchedulerConfig) -> Executor:
 
     Raises ``ValueError`` for an unknown executor or incomplete configuration.
     """
+    auth = (config.container_mlflow_tracking_auth or "").strip().lower()
+    if auth.startswith("kubernetes") and not (
+        config.executor == KubernetesExecutor.name and config.k8s_service_account
+    ):
+        # the MLflow client reads a service account token in the pod
+        raise ValueError(
+            f"SCHEDULER_CONTAINER_MLFLOW_TRACKING_AUTH={auth} needs SCHEDULER_EXECUTOR=kubernetes "
+            "and SCHEDULER_K8S_SERVICE_ACCOUNT"
+        )
     if config.executor == PodmanExecutor.name:
         return PodmanExecutor(base_url=config.podman_url, relabel=config.podman_relabel)
     if config.executor == KubernetesExecutor.name:
@@ -22,6 +31,7 @@ def create_executor(config: SchedulerConfig) -> Executor:
             namespace=config.k8s_namespace,
             kubeconfig=config.k8s_kubeconfig,
             context=config.k8s_context,
+            service_account=config.k8s_service_account,
             image_pull_secret=config.k8s_image_pull_secret,
             active_deadline=config.k8s_active_deadline,
         )
