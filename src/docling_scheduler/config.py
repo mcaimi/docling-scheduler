@@ -16,7 +16,7 @@ def _list_env(name: str, default: list[str]) -> list[str]:
 
 def _default_db_path() -> Path:
     base = os.getenv("XDG_DATA_HOME") or os.path.join(Path.home(), ".local", "share")
-    return Path(base) / "docling-agent" / "scheduler.db"
+    return Path(base) / "docling-scheduler" / "scheduler.db"
 
 
 def _optional_int(name: str) -> int | None:
