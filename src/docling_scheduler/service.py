@@ -35,6 +35,10 @@ class RunNotFound(KeyError):
     pass
 
 
+class ShardNotFound(KeyError):
+    pass
+
+
 class PreflightFailed(Exception):
     def __init__(self, report: Preflight):
         super().__init__("pre-flight validation failed")
@@ -291,6 +295,14 @@ class SchedulerService:
             record.mlflow_experiment_id, record.mlflow_parent_run_id, after, generation
         )
 
+    def shard_workflow(self, run_id: str, shard_index: int) -> dict[str, Any]:
+        record = self._record(run_id)
+        if not 0 <= shard_index < record.shard_count:
+            raise ShardNotFound(shard_index)
+        return self.monitor.shard_workflow(
+            record.mlflow_experiment_id, record.mlflow_parent_run_id, shard_index
+        )
+
     def error_reports(self, run_id: str) -> list[dict[str, Any]]:
         record = self._record(run_id)
         return self.monitor.error_reports(record.mlflow_experiment_id, record.mlflow_parent_run_id)
@@ -377,6 +389,7 @@ class SchedulerService:
 __all__ = [
     "SchedulerService",
     "RunNotFound",
+    "ShardNotFound",
     "PreflightFailed",
     "InvalidState",
     "CANCELLED",

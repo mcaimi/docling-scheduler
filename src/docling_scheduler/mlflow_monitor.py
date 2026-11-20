@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .reconcile import ChildRun, child_from_mlflow, latest_children
+from .workflow import RUN_STEPS, shard_workflow
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,8 @@ def trace_to_row(trace: Any) -> dict[str, Any] | None:
     )
     return {
         "trace_id": trace.info.trace_id,
+        # the shard attempt (MLflow child run) that processed the document
+        "mlflow_run_id": (trace.info.trace_metadata or {}).get("mlflow.sourceRun"),
         "file": attributes.get("file"),
         "file_format": attributes.get("file_format"),
         "shard_index": attributes.get("shard_index"),
@@ -217,6 +220,61 @@ class MlflowMonitor:
                 for report in json.loads(Path(path).read_text()):
                     merged.append({**report, "shard_index": shard})
         return merged
+
+    def shard_workflow(self, experiment_id: str, parent_run_id: str, shard_index: int) -> dict[str, Any]:
+        """Workflow graph of a shard's latest run (see ``workflow.shard_workflow``)."""
+        children = self.children(experiment_id, parent_run_id)
+        attempts = sum(1 for c in children if c.shard_index == shard_index)
+        child = latest_children(children).get(shard_index)
+        if child is None:
+            return shard_workflow(shard_index, None, attempts, [], [])
+        step_traces = self._step_traces(experiment_id, child.run_id)
+        cache = self._cache(parent_run_id)
+        with cache.lock:
+            self._refresh(cache, experiment_id, parent_run_id)
+            rows = [r for r in cache.rows if r.get("mlflow_run_id") == child.run_id]
+        return shard_workflow(
+            shard_index, child, attempts, step_traces, rows,
+            link=self.run_link(experiment_id, child.run_id),
+        )
+
+    def _step_traces(self, experiment_id: str, child_run_id: str) -> list[dict[str, Any]]:
+        names = {name for _, name in RUN_STEPS}
+        traces = self.client.search_traces(
+            locations=[experiment_id],
+            filter_string=(
+                f"metadata.`mlflow.sourceRun` = '{_check_run_id(child_run_id)}'"
+                f" AND trace.name != '{DOCUMENT_SPAN}'"
+            ),
+            include_spans=False,
+            max_results=100,
+        )
+        steps = []
+        for trace in traces:
+            info = trace.info
+            name = (info.tags or {}).get("mlflow.traceName")
+            if name not in names:  # e.g. LLM autolog traces
+                continue
+            state = getattr(info.state, "value", str(info.state))
+            steps.append(
+                {
+                    "name": name,
+                    "state": state,
+                    "started_at_ms": info.request_time,
+                    "duration_ms": info.execution_duration,
+                    "error": self._trace_error(info.trace_id) if state == "ERROR" else None,
+                }
+            )
+        return steps
+
+    def _trace_error(self, trace_id: str) -> str | None:
+        try:
+            spans = self.client.get_trace(trace_id).data.spans
+        except Exception as e:
+            logger.debug("trace %s not readable: %s", trace_id, e)
+            return None
+        root = next((s for s in spans if s.parent_id is None), None)
+        return (root.status.description or None) if root is not None else None
 
     # --- documents ---------------------------------------------------------
 

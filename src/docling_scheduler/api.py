@@ -25,7 +25,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .executors.base import ExecutorError
 from .models import RunRequest
-from .service import InvalidState, PreflightFailed, RunNotFound, SchedulerService
+from .service import InvalidState, PreflightFailed, RunNotFound, SchedulerService, ShardNotFound
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +158,15 @@ def create_app(service: SchedulerService, *, port: int | None = None) -> FastAPI
             return service.documents(run_id, after=after, generation=generation)
         except RunNotFound:
             raise not_found(run_id) from None
+
+    @app.get("/api/runs/{run_id}/shards/{shard_index}/workflow")
+    def shard_workflow(run_id: str, shard_index: int):
+        try:
+            return service.shard_workflow(run_id, shard_index)
+        except RunNotFound:
+            raise not_found(run_id) from None
+        except ShardNotFound:
+            raise HTTPException(status_code=404, detail=f"run {run_id} has no shard {shard_index}") from None
 
     @app.get("/api/runs/{run_id}/errors")
     def run_errors(run_id: str):
