@@ -641,24 +641,6 @@
       }
     },
     {
-      "key": "mlflow_langchain_autolog",
-      "env": "MLFLOW_LANGCHAIN_AUTOLOG",
-      "type": "bool",
-      "default": 0,
-      "dynamic_default": null,
-      "group": "tracing",
-      "description": "Also autolog LangGraph task spans (large payloads; can drop traces on an MLflow server)",
-      "choices": null,
-      "sensitive": false,
-      "untrusted": false,
-      "env_fallbacks": [],
-      "depends_on": {
-        "enable_tracing": [
-          "1"
-        ]
-      }
-    },
-    {
       "key": "mlflow_session_id",
       "env": "MLFLOW_SESSION_ID",
       "type": "str",
