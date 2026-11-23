@@ -232,11 +232,6 @@ def _check_settings(settings: dict[str, Any], shards: int, report: Preflight) ->
             f"{shards} shards will write to one {backend} instance concurrently"
         )
 
-    if settings.get("mlflow_langchain_autolog"):
-        report.warnings.append(
-            "mlflow_langchain_autolog records whole documents in spans; traces whose "
-            "payload exceeds MLflow limits are dropped and the document view will miss them"
-        )
     if _missing_key(settings.get("embedding_api_key")):
         report.warnings.append("embedding_api_key is not set; embeddings will fail")
     if settings.get("user_prompt") and _missing_key(settings.get("api_key")):
