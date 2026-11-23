@@ -253,7 +253,7 @@ class MlflowMonitor:
         for trace in traces:
             info = trace.info
             name = (info.tags or {}).get("mlflow.traceName")
-            if name not in names:  # e.g. LLM autolog traces
+            if name not in names:  # not a top-level step trace
                 continue
             state = getattr(info.state, "value", str(info.state))
             steps.append(
